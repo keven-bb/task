@@ -20,6 +20,10 @@
 5. 更新地址余额
 6. 休息1分钟，从第1步开始
 
+#### 效率
+- 并发请求事件数据速度很快，ms级别返回，响应速度取决于块中事件数量，即响应包的大小
+- 并发请求地址余额则很慢，因为无法聚合请求，每次只能请求一个地址的余额，`UNI`上现有`Holder`数量约`20万`, 交互过的地址约`10`倍，即需要`200万`个请求，才能得到所有地址的余额
+
 #### 问题与解决
 1. infura 提供的节点，最多返回`10000`条数据，超出则返回异常
    
@@ -58,30 +62,34 @@
    - 将`20`个任务的结果聚合入库
    - 再遍历下一个任务块
    
+4. 请求异常
+    
+    高频并发请求服务器会出现`SERVER_ERROR`，由于都是读请求，所以每个请求重试`3`次（可配置），全部失败的话，请抛出异常，停止任务
+
 #### 使用说明
 
 环境：
-   - nodejs v12.14.0
-   - mysql v5.7
-   - docker
+- nodejs v12.14.0
+- mysql v5.7
+- docker
 
 使用前置：
-   - 启用mysql：`docker run --name bybit-task -e MYSQL_ROOT_PASSWORD=secret -e MYSQL_DATABASE=bybit -p 3306:3306 -d --rm mysql:5.7`
-   - 安装依赖：`yarn`
-   - 迁移表结构：`yarn db-migrate up`
+- 启用mysql：`docker run --name bybit-task -e MYSQL_ROOT_PASSWORD=secret -e MYSQL_DATABASE=bybit -p 3306:3306 -d --rm mysql:5.7`
+- 安装依赖：`yarn`
+- 迁移表结构：`yarn db-migrate up`
 
 使用命令：
-   - `yarn update $token $from`
-      - 说明：从`from`块开始更新`token`的交互地址
-      - 参数：
-            - `$token`：`token` 地址
-            - `$from`：`from` 开始遍历的块
-        
-   - `yarn monitor $token`
-        - 说明：增量更新，每分钟更新一次（可配置）
-        - 参数：
-            - `$token`: `token`地址，必须之前执行过增量更新
-    
-        
-   - `yarn test`
-        - 说明：执行单元测试
+- `yarn update $token $from`
+    - 说明：从`from`块开始更新`token`的交互地址
+    - 参数：
+      - `$token`：`token` 地址
+      - `$from`：`from` 开始遍历的块
+
+- `yarn monitor $token`
+    - 说明：增量更新，每分钟更新一次（可配置）
+    - 参数：
+        - `$token`: `token`地址，必须之前执行过增量更新
+
+
+- `yarn test`
+    - 说明：执行单元测试

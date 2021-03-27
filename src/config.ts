@@ -83,6 +83,10 @@ export class Configuration {
     return this._requests
   }
 
+  public static get collectLimit(): number {
+    return config.get('collect.limit')
+  }
+
   static set collectRequests(value: number) {
     this._requests = value
   }

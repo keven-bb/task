@@ -22,6 +22,7 @@ export const getBalances = async (token: string, addresses: string[]) => {
   // 拆成100个地址每组
   const steps = 100
   let result: Array<{address: string; balance: string}> = []
+  const startAt = new Date().getTime()
   for (let i = 0; i < addresses.length; i += steps) {
     const slice = addresses.slice(i, i + steps)
     result = [
@@ -31,6 +32,7 @@ export const getBalances = async (token: string, addresses: string[]) => {
       }),
     ]
   }
+  Configuration.logger.debug('Fetch %d balances with %d ms', addresses.length, new Date().getTime() - startAt)
 
   return result
 }
@@ -83,7 +85,7 @@ export function balanceOf(token: string, address: string): Promise<BigNumber> {
     () => erc20.balanceOf(address),
     Configuration.retry,
     err => {
-      Configuration.logger.debug('Query balance failed! token: %s, address: %s, error: %s', token, address, err.message)
+      Configuration.logger.error('Query balance failed! token: %s, address: %s, error: %s', token, address, err.message)
     },
   )
 }
