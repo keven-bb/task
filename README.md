@@ -41,3 +41,31 @@
    - 聚合`20`个任务的请求结果
    - 将聚合后的结果入库
    - 再遍历下一个任务块
+   
+#### 使用说明
+
+环境：
+   - nodejs v12.14.0
+   - mysql v5.7
+   - docker
+
+使用前置：
+   - 启用mysql：`docker run --name bybit-task -e MYSQL_ROOT_PASSWORD=secret -e MYSQL_DATABASE=bybit -p 3306:3306 -d --rm mysql:5.7`
+   - 安装依赖：`yarn`
+   - 迁移表数据：`yarn db-migrate up`
+
+使用命令：
+   - `yarn update $token $from`
+      - 说明：从`from`块开始更新`token`的交互地址
+      - 参数：
+            - `$token`：`token` 地址
+            - `$from`：`from` 开始遍历的块
+        
+   - `yarn monitor $token`
+        - 说明：增量更新，每分钟更新一次（可配置）
+        - 参数：
+            - `$token`: `token`地址，必须之前执行过增量更新
+    
+        
+   - `yarn test`
+        - 说明：执行单元测试
