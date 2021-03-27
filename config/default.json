@@ -1,0 +1,21 @@
+{
+  "ganache": {
+    "port": 5984,
+    "mnemonic": "quote trash liar dad trial hotel place leave poem deposit photo upon chef east finger",
+    "balance": "10000000000000000000000000"
+  },
+  "eth": {
+    "host": "http://127.0.0.1:5984"
+  },
+  "collect": {
+    "blocks": 10,
+    "requests": 2
+  },
+  "db": {
+    "host": "127.0.0.1",
+    "port": 3306,
+    "user": "root",
+    "password": "secret",
+    "database": "bybit"
+  }
+}

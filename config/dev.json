@@ -1,0 +1,20 @@
+{
+  "collect": {
+    "blocks": 100,
+    "requests": 20,
+    "batch": 2000,
+    "interval": 60000
+  },
+  "eth": {
+    "type": "infura",
+    "apiKey": "19cbc534f22846558dc2cc275c0713f4",
+    "chainId": 1
+  },
+  "db": {
+    "host": "127.0.0.1",
+    "port": 3306,
+    "user": "root",
+    "password": "secret",
+    "database": "bybit"
+  }
+}
