@@ -8,7 +8,8 @@
   "eth": {
     "type": "infura",
     "apiKey": "19cbc534f22846558dc2cc275c0713f4",
-    "chainId": 1
+    "chainId": 1,
+    "retry": 3
   },
   "db": {
     "host": "127.0.0.1",

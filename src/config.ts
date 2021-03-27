@@ -74,6 +74,10 @@ export class Configuration {
     this._blocks = steps
   }
 
+  public static get retry(): number {
+    return config.get('eth.retry')
+  }
+
   static get collectRequests(): number {
     this._requests = this._requests || config.get('collect.requests')
     return this._requests

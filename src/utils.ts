@@ -1,4 +1,4 @@
-import {CollectResult} from './transfer-collector'
+import {CollectResult} from './collector'
 import {Configuration} from './config'
 import {BigNumber, Contract} from 'ethers'
 import {abi} from './erc20.json'
@@ -37,8 +37,9 @@ export const getBalances = async (token: string, addresses: string[]) => {
 
 export const retry = <T>(
   promiseFu: () => Promise<T>,
-  times = 3,
+  times = Configuration.retry,
   errCallback = (error: Error) => {
+    Configuration.logger.error('Retry error: ' + error.message)
     return
   },
 ): Promise<T> => {
@@ -76,15 +77,13 @@ export function add0x(address: string) {
   return address.slice(0, 2) === '0x' ? address : `0x${address}`
 }
 
-export async function balanceOf(token: string, address: string): Promise<BigNumber> {
+export function balanceOf(token: string, address: string): Promise<BigNumber> {
   const erc20 = new Contract(token, abi, Configuration.provider)
-  const balance = await retry<BigNumber>(
+  return retry<BigNumber>(
     () => erc20.balanceOf(address),
-    3,
+    Configuration.retry,
     err => {
       Configuration.logger.debug('Query balance failed! token: %s, address: %s, error: %s', token, address, err.message)
     },
   )
-  // Configuration.logger.debug('Balance of %s in %s: %s', address, token, balance.toString())
-  return balance
 }

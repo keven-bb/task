@@ -1,8 +1,6 @@
 import {Holder} from './holder'
 import {Configuration} from './config'
 import {Tokens} from './db/tokens'
-import {Balances} from './db/balances'
-import {balanceOf, getBalances} from './utils'
 
 const [, , address, fromStr] = process.argv
 if (address === '' || fromStr === '') {
@@ -19,15 +17,9 @@ if (address === '' || fromStr === '') {
     const latest = await Configuration.provider.getBlockNumber()
     const holder = new Holder(token, token.current, latest)
     await holder.addAddress()
-    token = await Tokens.getTokenById(token.id)
-    const total = await Balances.countByTokenId(token.id)
-    const limit = 2000
-    for (let i = 0; i < total; i += limit) {
-      const addresses = await Balances.queryAddress(token.id, limit, i)
-      const balances = await getBalances(token.address, addresses)
-      await Balances.updateBalances(balances.map(balance => ({...balance, tid: token.id})))
-    }
+    await holder.updateBalanceInDB()
   } finally {
     Configuration.logger.debug(`Finish：${new Date().getTime() - startAt} ms`)
+    process.exit(0)
   }
 })()

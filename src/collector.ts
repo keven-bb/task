@@ -9,7 +9,7 @@ export class CollectResult {
   constructor(public readonly from: number, public readonly to: number, public readonly events: Array<Event>) {}
 }
 
-export class TransferCollector {
+export class Collector {
   private readonly contract: Contract
   private readonly from: number
   private readonly to: number
@@ -50,14 +50,15 @@ export class TransferCollector {
 
   private async queryFilter(filter: EventFilter, from: number, to: number) {
     try {
-      const logs = await retry(async () => {
-        try {
+      const logs = await retry(
+        async () => {
           return await this.contract.queryFilter(filter, from, to)
-        } catch (e) {
-          logger.error('Query %s(%d - %d) failed, error: %s', this.contract.address, from, to, e.message)
-          throw e
-        }
-      }, 3)
+        },
+        Configuration.retry,
+        err => {
+          logger.error('Query %s(%d - %d) failed, error: %s', this.contract.address, from, to, err.message)
+        },
+      )
       logger.debug(
         'Scan blocks from %d to %d, get %d events in contract %s.',
         from,

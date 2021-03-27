@@ -4,7 +4,7 @@ import {Configuration} from '../src/config'
 import {BigNumber, Contract, ContractFactory, utils} from 'ethers'
 import {abi, byteCode} from '../src/erc20.json'
 import {generateAccounts, splitToRandomNum} from './helpers/utils'
-import {CollectResult, TransferCollector} from '../src/transfer-collector'
+import {CollectResult, Collector} from '../src/collector'
 
 describe('Event Collector Test', () => {
   beforeEach(async () => {
@@ -25,7 +25,7 @@ describe('Event Collector Test', () => {
     let contractFactory = new ContractFactory(abi, byteCode, wallet)
     const token = await contractFactory.deploy('Token', 'Token')
 
-    const eventCollector = new TransferCollector(token, 0, 100)
+    const eventCollector = new Collector(token, 0, 100)
 
     const value = 10000
     const accounts = 67
