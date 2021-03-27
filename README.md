@@ -84,12 +84,19 @@
     - 参数：
       - `$token`：`token` 地址
       - `$from`：`from` 开始遍历的块
+    - 例子：
+        - 从第`12110391`个区块开始更新`UNI`上的地址余额
+          
+            `yarn update 0x1f9840a85d5af5bf1d1762f925bdaddc4201f984 12110391`
 
 - `yarn monitor $token`
     - 说明：增量更新，每分钟更新一次（可配置）
     - 参数：
         - `$token`: `token`地址，必须之前执行过增量更新
-
-
+    - 例子：
+        - 每分钟更新一次`UNI`上的地址余额
+          
+            `yarn monitor 0x1f9840a85d5af5bf1d1762f925bdaddc4201f984`
+          
 - `yarn test`
     - 说明：执行单元测试
