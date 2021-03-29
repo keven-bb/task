@@ -1,7 +1,9 @@
 import {CollectResult} from './collector'
 import {Configuration} from './config'
-import {BigNumber, Contract} from 'ethers'
+import {Contract} from 'ethers'
 import {abi} from './erc20.json'
+import axios from 'axios'
+import BigNumber from 'bignumber.js'
 
 export const extractTransferAddress = (result: CollectResult) => {
   let addresses = result.events.flatMap(event => {
@@ -88,4 +90,25 @@ export function balanceOf(token: string, address: string): Promise<BigNumber> {
       Configuration.logger.error('Query balance failed! token: %s, address: %s, error: %s', token, address, err.message)
     },
   )
+}
+
+export async function getPrice(token: string, timestamp: number) {
+  const response = await axios.post(
+    'https://api.thegraph.com/subgraphs/name/uniswap/uniswap-v2',
+    {
+      query: '{tokenDayDatas(where:{date:' + timestamp + ',token:"' + token + '"}){priceUSD}}',
+      variables: {},
+    },
+    {
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+      },
+    },
+  )
+  const tokenDayDatas = (response as any).data.data.tokenDayDatas as Array<{priceUSD: number}>
+  if (tokenDayDatas.length > 0) {
+    return new BigNumber(tokenDayDatas[0].priceUSD)
+  }
+  return new BigNumber(0)
 }

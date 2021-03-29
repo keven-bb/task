@@ -5,7 +5,7 @@ import {BigNumber, Contract, ContractFactory, utils} from 'ethers'
 import {abi, byteCode} from '../src/erc20.json'
 import {generateAccounts, splitToRandomNum} from './helpers/utils'
 import {Collector} from '../src/collector'
-import {extractTransferAddress} from '../src/utils'
+import {extractTransferAddress, getPrice} from '../src/utils'
 
 describe('Util Test', () => {
   beforeEach(async () => {
@@ -33,6 +33,14 @@ describe('Util Test', () => {
 
     const re = extractTransferAddress(result)
     assert.equal(accounts.length + 1, re.addresses.length)
+  })
+
+  it('token price test', async () => {
+    let rees = await getPrice('0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2', 1590364800)
+    assert.equal('203.9424846564098624190506562846751', rees.toString())
+
+    rees = await getPrice('0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2', 1590364801)
+    assert.equal('0', rees.toString())
   })
 
   afterEach(async () => {
