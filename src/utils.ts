@@ -1,4 +1,4 @@
-import {CollectResult} from './collector'
+import {CollectResult} from './transfer-collect'
 import {Configuration} from './config'
 import {Contract} from 'ethers'
 import {abi} from './erc20.json'

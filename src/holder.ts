@@ -1,7 +1,7 @@
 import {Contract} from 'ethers'
 import {Configuration} from './config'
 import {abi} from '../src/erc20.json'
-import {Collector} from './collector'
+import {TransferCollect} from './transfer-collect'
 import {extractTransferAddress, getBalances} from './utils'
 import {IToken, Tokens} from './db/tokens'
 import {Balances} from './db/balances'
@@ -25,7 +25,7 @@ export class Holder {
     const from = this.from
     while (this.from < this.to) {
       const next = this.getNext()
-      const collector = new Collector(this.contract, this.from, next)
+      const collector = new TransferCollect(this.contract, this.from, next)
       const eventResult = await collector.getEvents()
       const addresses = extractTransferAddress(eventResult)
       count += addresses.addresses.length
@@ -46,7 +46,7 @@ export class Holder {
   public async updateBalance() {
     while (this.from < this.to) {
       const next = this.getNext()
-      const collector = new Collector(this.contract, this.from, next)
+      const collector = new TransferCollect(this.contract, this.from, next)
       const eventResult = await collector.getEvents()
       const addresses = extractTransferAddress(eventResult)
       const balances = await getBalances(this.token.address, addresses.addresses)

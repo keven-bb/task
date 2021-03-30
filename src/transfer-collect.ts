@@ -9,8 +9,8 @@ export class CollectResult {
   constructor(public readonly from: number, public readonly to: number, public readonly events: Array<Event>) {}
 }
 
-export class Collector {
-  private readonly contract: Contract
+export abstract class AbstractCollect {
+  protected readonly contract: Contract
   private readonly from: number
   private readonly to: number
 
@@ -20,7 +20,7 @@ export class Collector {
     this.to = to
   }
 
-  public async getEvents() {
+  public async getEvents(parameter: Array<Array<string> | string | null> = []) {
     const latest = await Configuration.provider.getBlockNumber()
     const tasks = splitTasks(
       this.from,
@@ -32,7 +32,7 @@ export class Collector {
 
     for (let task of tasks) {
       const promiseTasks = await Promise.allSettled(
-        task.map(({from, to}) => this.queryFilter(this.contract.filters.Transfer(), from, to)),
+        task.map(({from, to}) => this.queryFilter(this.getFilter(parameter), from, to)),
       )
       promiseTasks.forEach(t => {
         if (t.status === 'fulfilled') {
@@ -47,6 +47,8 @@ export class Collector {
 
     return new CollectResult(this.from, this.to, events)
   }
+
+  protected abstract getFilter(parameter: Array<Array<string> | string | null>): EventFilter
 
   private async queryFilter(filter: EventFilter, from: number, to: number) {
     try {
@@ -71,5 +73,17 @@ export class Collector {
       logger.error('Query %s(%d - %d) still failed, stop!', this.contract.address, this.from, this.to)
       throw e
     }
+  }
+}
+
+export class TransferCollect extends AbstractCollect {
+  protected getFilter(parameter: Array<Array<string> | string | null>) {
+    return this.contract.filters.Transfer(...parameter)
+  }
+}
+
+export class SwapCollect extends AbstractCollect {
+  protected getFilter(parameter: Array<Array<string> | string | null>): EventFilter {
+    return this.contract.filters.Swap(...parameter)
   }
 }
