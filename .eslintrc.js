@@ -3,7 +3,7 @@ module.exports = {
     node: true,
     es2021: true,
   },
-  extends: ['airbnb-base'],
+  extends: ['standard'],
   parser: '@typescript-eslint/parser',
   parserOptions: {
     ecmaVersion: 2021,
@@ -16,6 +16,8 @@ module.exports = {
     'no-underscore-dangle': ['error', {allowAfterThis: true}],
     'no-restricted-syntax': 'off',
     'no-console': ['error', {allow: ['log', 'error']}],
+    'comma-dangle': ['error', 'always-multiline'],
+    semi: ['error', 'always'],
   },
   settings: {
     'import/resolver': {
@@ -31,4 +33,4 @@ module.exports = {
       plugins: ['mocha'],
     },
   ],
-}
+};

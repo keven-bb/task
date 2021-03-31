@@ -1,4 +1,11 @@
 {
+  "collect": {
+    "blocks": 10,
+    "requests": 2,
+    "batch": 2000,
+    "interval": 60000,
+    "limit": 300
+  },
   "ganache": {
     "port": 5984,
     "mnemonic": "quote trash liar dad trial hotel place leave poem deposit photo upon chef east finger",
@@ -9,15 +16,21 @@
     "host": "http://127.0.0.1:5984",
     "retry": 3
   },
-  "collect": {
-    "blocks": 10,
-    "requests": 2
-  },
   "db": {
     "host": "127.0.0.1",
     "port": 3306,
     "user": "root",
     "password": "secret",
     "database": "bybit"
+  },
+  "uniswap": {
+    "router": {
+      "address": "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D",
+      "deployBlock": "10007197"
+    },
+    "factory": {
+      "address": "0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f",
+      "deployBlock": "10000835"
+    }
   }
 }
