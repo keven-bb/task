@@ -97,7 +97,17 @@
         - 每分钟更新一次`UNI`上的地址余额
           
             `yarn monitor 0x1f9840a85d5af5bf1d1762f925bdaddc4201f984`
-          
+
+- `yarn cost ${client} ${token}`
+    - 说明：查看某地址下指定token的持有量及成本
+    - 参数：
+        - `$client`: 用户地址
+        - `$token`: `token`地址
+    - 例子：
+        - 查看地址(0x690524A31Ce96Bea837F32e43c7492f3031450a8)的持有量及成本
+
+          `yarn cost 0x690524A31Ce96Bea837F32e43c7492f3031450a8 0x1f9840a85d5af5bf1d1762f925bdaddc4201f984`
+    
 - `yarn test`
     - 说明：执行单元测试
 
