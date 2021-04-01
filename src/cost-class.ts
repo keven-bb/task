@@ -101,7 +101,11 @@ export class Cost {
     value,
   }: TransactionResponse, { logs }: TransactionReceipt): Promise<{ hold: BigNumberJs, cost: BigNumberJs }> {
     const transactionDescription = Configuration.router.interface.parseTransaction({ data, value });
-    const { name, args: { path } } = transactionDescription;
+    const {
+      name,
+      args,
+    } = transactionDescription;
+    const path = args.path as Array<string>;
     const fromToken = new Contract(path[0].toLowerCase(), ERC20JSON.abi, Configuration.provider);
     const toToken = new Contract(path[path.length - 1].toLowerCase(), ERC20JSON.abi, Configuration.provider);
     if (fromToken.address !== this.token.address && toToken.address !== this.token.address) {
@@ -111,46 +115,72 @@ export class Cost {
         cost: new BigNumberJs(0),
       };
     }
-
-    const swapHash = utils.id('Swap(address,uint256,uint256,uint256,uint256,address)');
-    const eventAndAddress = logs.filter(({ topics: [name] }) => name === swapHash)
+    const eventAndAddress = logs.filter(({ topics: [name] }) => name === utils.id('Swap(address,uint256,uint256,uint256,uint256,address)'))
       .map(
         (log) => ({
-          address: log.address,
+          address: log.address.toLowerCase(),
           event: new utils.Interface(PairJSON.abi).parseLog(log),
         }),
-      )
-      .find(
-        ({ event: { args: { to } } }) => to.toLowerCase() === this.client,
       );
-
-    if (!eventAndAddress) {
-      Configuration.logger.debug('could not find the last eventAndAddress');
+    const pairPath = (await Promise.all(
+      path.slice(0, path.length - 1)
+        .map(
+          async (p, index) => (await Configuration.factory.getPair(p, path[index + 1])).toLowerCase(),
+        ),
+    )).map((pairAddress) => {
+      const event = eventAndAddress.find(({ address }) => pairAddress === address);
+      if (!event) {
+        throw new Error('no swap event emitted!');
+      }
       return {
-        hold: new BigNumberJs(0),
-        cost: new BigNumberJs(0),
+        contract: new Contract(pairAddress, PairJSON.abi, Configuration.provider),
+        event: event.event,
       };
-    }
-
-    const { address, event } = eventAndAddress;
-    const { timestamp } = await Configuration.provider.getBlock(blockNumber as number);
-    const lastSwapPair = new Contract(address, PairJSON.abi, Configuration.provider);
-    const token0Address = (await lastSwapPair.token0()).toLowerCase();
+    });
 
     switch (name) {
       case 'swapExactTokensForTokens': {
+        const { contract: lastSwapPair, event } = pairPath[pairPath.length - 1];
+        const token0Address = (await lastSwapPair.token0()).toLowerCase();
         const { args: [amountIn] } = transactionDescription;
+
+        const { timestamp } = await Configuration.provider.getBlock(blockNumber as number);
         if (fromToken.address === this.token.address) {
-          return await this.swapExactTokensForTokensOut(token0Address, toToken, event, timestamp, amountIn);
+          return this.swapExactTokensForTokensOut(token0Address, toToken, event, timestamp, amountIn);
         } else {
-          return await this.swapExactTokensForTokensIn(token0Address, toToken, event, fromToken, timestamp, amountIn);
+          return this.swapExactTokensForTokensIn(token0Address, toToken, event, fromToken, timestamp, amountIn);
         }
       }
       case 'swapTokensForExactTokens': {
-        return {
-          hold: new BigNumberJs(0),
-          cost: new BigNumberJs(0),
-        };
+        const { contract: firstSwapPair, event } = pairPath[0];
+        const token0Address = (await firstSwapPair.token0()).toLowerCase();
+        const { timestamp } = await Configuration.provider.getBlock(blockNumber as number);
+        const { args: [amountOut] } = transactionDescription;
+        if (fromToken.address === this.token.address) {
+          const amountIn = fromToken.address === token0Address ? event.args.amount0In : event.args.amount1In;
+          const price = await this.getPrice(fromToken, timestamp);
+          if (price.eq('0')) {
+            Configuration.logger.debug('No price exists');
+            return { hold: new BigNumberJs(0), cost: new BigNumberJs(0) };
+          }
+          const decimalsBN = new BigNumberJs('10').pow((await toToken.decimals()).toString());
+          return {
+            hold: new BigNumberJs(amountIn.toString()).multipliedBy(-1),
+            cost: new BigNumberJs(amountOut.toString()).multipliedBy(price).div(decimalsBN).multipliedBy(-1),
+          };
+        } else {
+          const amountIn = fromToken.address === token0Address ? event.args.amount0In : event.args.amount1In;
+          const price = await this.getPrice(fromToken, timestamp);
+          if (price.eq('0')) {
+            Configuration.logger.debug('No price exists');
+            return { hold: new BigNumberJs(0), cost: new BigNumberJs(0) };
+          }
+          const decimalsBN = new BigNumberJs('10').pow((await fromToken.decimals()).toString());
+          return {
+            hold: new BigNumberJs(amountOut.toString()),
+            cost: new BigNumberJs(amountIn.toString()).multipliedBy(price).div(decimalsBN),
+          };
+        }
       }
       case 'swapExactETHForTokens': {
         return {
@@ -222,7 +252,7 @@ export class Cost {
     const decimalsBN = new BigNumberJs('10').pow((await toToken.decimals()).toString());
     return {
       hold: new BigNumberJs(amountIn.toString()).multipliedBy(-1),
-      cost: new BigNumberJs(amountOut.toString()).times(price).div(decimalsBN).multipliedBy(-1),
+      cost: new BigNumberJs(amountOut.toString()).multipliedBy(price).div(decimalsBN).multipliedBy(-1),
     };
   }
 }

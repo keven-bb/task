@@ -68,6 +68,37 @@ describe('Uniswap Cost Test', () => {
     assert.equal(cost.toString(), expectedCost);
   });
 
+  it('swapTokensForExactTokens - swap in', async () => {
+    const [tokenA, tokenB] = tokens;
+    const amountMaxIn = utils.parseEther('20');
+    const amountOut = utils.parseEther('10');
+    const { hash } = await uniswap.swapTokensForExactTokens([tokenA, tokenB], amountMaxIn, amountOut, Configuration.wallet.address);
+    const { hold, cost } = await new Cost(Configuration.wallet.address, tokenB.address, getPrice).start();
+
+    const expectedHold = amountOut.toString();
+    assert.equal(hold.toString(), expectedHold);
+
+    const price = await getPriceFrom(hash, tokenA);
+    const [{ args: { amount1In } }] = (await uniswap.getSwapEvent(tokenA, tokenB, Configuration.wallet.address)) as Result | { args: { amount0Out: BigNumber } }[];
+    const expectedCost = price.multipliedBy(amount1In.toString()).div(new BigNumberJs(10).pow(18)).toString();
+    assert.equal(cost.toString(), expectedCost);
+  });
+
+  it('swapTokensForExactTokens - swap out', async () => {
+    const [tokenA, tokenB] = tokens;
+    const amountMaxIn = utils.parseEther('20');
+    const amountOut = utils.parseEther('10');
+    const { hash } = await uniswap.swapTokensForExactTokens([tokenA, tokenB], amountMaxIn, amountOut, Configuration.wallet.address);
+    const { hold, cost } = await new Cost(Configuration.wallet.address, tokenA.address, getPrice).start();
+
+    const [{ args: { amount1In } }] = (await uniswap.getSwapEvent(tokenA, tokenB, Configuration.wallet.address)) as Result | { args: { amount0Out: BigNumber } }[];
+    const expectedHold = '-' + amount1In.toString();
+    assert.equal(hold.toString(), expectedHold);
+
+    const price = await getPriceFrom(hash, tokenA);
+    const expectedCost = '-' + price.multipliedBy(amountOut.toString()).div(new BigNumberJs(10).pow(18)).toString();
+    assert.equal(cost.toString(), expectedCost);
+  });
   afterEach(async () => {
     await GanacheFixture.stop();
     tokens = [];

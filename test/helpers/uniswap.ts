@@ -80,6 +80,19 @@ export class Uniswap {
     );
   }
 
+  public async swapTokensForExactTokens (tokens: Array<Contract>, amountMaxIn: BigNumber, amountOut:BigNumber, to: string): Promise<TransactionResponse> {
+    await tokens[0].approve(this.router.address, amountMaxIn);
+    return retry(() =>
+      this.router.swapTokensForExactTokens(
+        amountOut,
+        amountMaxIn,
+        tokens.map(t => t.address),
+        to,
+        Uniswap.getDeadline(),
+      ),
+    );
+  }
+
   private static getDeadline () {
     return (new Date().getTime() / 1000 + 2 * 60).toFixed(0);
   }
