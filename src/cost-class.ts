@@ -4,8 +4,7 @@ import { Configuration } from './config';
 import BigNumberJs from 'bignumber.js';
 import { PairCreatedCollect, SwapCollect } from './transfer-collect';
 import PairJSON from '@uniswap/v2-periphery/build/IUniswapV2Pair.json';
-import { TransactionReceipt, TransactionResponse } from '@ethersproject/abstract-provider';
-import { LogDescription } from 'ethers/lib/utils';
+import { Log, TransactionReceipt, TransactionResponse } from '@ethersproject/abstract-provider';
 import { Price } from './price';
 
 export class Cost {
@@ -15,7 +14,7 @@ export class Cost {
   constructor (
     client: string,
     token: string,
-    private getPrice: (token:Contract, timestamp:number)=>Promise<BigNumberJs> = Price.getPrice.bind(Price),
+    private getPrice: (token: Contract, timestamp: number) => Promise<BigNumberJs> = Price.getPrice.bind(Price),
   ) {
     this.token = new Contract(token.toLowerCase(), ERC20JSON.abi, Configuration.provider);
     this.client = client.toLowerCase();
@@ -115,41 +114,18 @@ export class Cost {
         cost: new BigNumberJs(0),
       };
     }
-    const eventAndAddress = logs.filter(({ topics: [name] }) => name === utils.id('Swap(address,uint256,uint256,uint256,uint256,address)'))
-      .map(
-        (log) => ({
-          address: log.address.toLowerCase(),
-          event: new utils.Interface(PairJSON.abi).parseLog(log),
-        }),
-      );
-    const pairPath = (await Promise.all(
-      path.slice(0, path.length - 1)
-        .map(
-          async (p, index) => (await Configuration.factory.getPair(p, path[index + 1])).toLowerCase(),
-        ),
-    )).map((pairAddress) => {
-      const event = eventAndAddress.find(({ address }) => pairAddress === address);
-      if (!event) {
-        throw new Error('no swap event emitted!');
-      }
-      return {
-        contract: new Contract(pairAddress, PairJSON.abi, Configuration.provider),
-        event: event.event,
-      };
-    });
+    const pairPath = await this.getPairAndEvents(logs, path);
 
     switch (name) {
       case 'swapExactTokensForTokens': {
         const { contract: lastSwapPair, event } = pairPath[pairPath.length - 1];
         const token0Address = (await lastSwapPair.token0()).toLowerCase();
         const { args: [amountIn] } = transactionDescription;
-
         const { timestamp } = await Configuration.provider.getBlock(blockNumber as number);
-        if (fromToken.address === this.token.address) {
-          return this.swapExactTokensForTokensOut(token0Address, toToken, event, timestamp, amountIn);
-        } else {
-          return this.swapExactTokensForTokensIn(token0Address, toToken, event, fromToken, timestamp, amountIn);
-        }
+        const amountOut = token0Address === toToken.address ? event.args.amount0Out : event.args.amount1Out;
+        return fromToken.address === this.token.address
+          ? this.negativeHold(toToken, timestamp, amountIn, amountOut)
+          : this.positiveHold(fromToken, timestamp, amountIn, amountOut);
       }
       case 'swapTokensForExactTokens': {
         const { contract: firstSwapPair, event } = pairPath[0];
@@ -194,7 +170,39 @@ export class Cost {
     }
   }
 
-  private async positiveHold (token: Contract, timestamp: number, amountIn:BigNumber, amountOut:BigNumber) {
+  private async getPairAndEvents (logs: Array<Log>, path: Array<string>) {
+    const eventAndAddress = logs
+      // 过滤所有非Swap事件
+      .filter(({ topics: [name] }) => name === utils.id('Swap(address,uint256,uint256,uint256,uint256,address)'))
+      // 将Swap事件与发出事件的合约绑定到一起
+      .map(
+        (log) => ({
+          address: log.address.toLowerCase(),
+          event: new utils.Interface(PairJSON.abi).parseLog(log),
+        }),
+      );
+    return (await Promise.all(
+      // 获得swap路径下对应的pair合约
+      path
+        .slice(0, path.length - 1)
+        .map(
+          async (p, index) => (await Configuration.factory.getPair(p, path[index + 1])).toLowerCase(),
+        ),
+    ))
+      // 将pair合约与事件绑定在一起
+      .map((pairAddress) => {
+        const event = eventAndAddress.find(({ address }) => pairAddress === address);
+        if (!event) {
+          throw new Error('no swap event emitted!');
+        }
+        return {
+          contract: new Contract(pairAddress, PairJSON.abi, Configuration.provider),
+          event: event.event,
+        };
+      });
+  }
+
+  private async positiveHold (token: Contract, timestamp: number, amountIn: BigNumber, amountOut: BigNumber) {
     const price = await this.getPrice(token, timestamp);
     if (price.eq('0')) {
       Configuration.logger.debug('No price exists');
@@ -207,54 +215,13 @@ export class Cost {
     };
   }
 
-  private async negativeHold (token: Contract, timestamp: number, amountIn:BigNumber, amountOut:BigNumber) {
+  private async negativeHold (token: Contract, timestamp: number, amountIn: BigNumber, amountOut: BigNumber) {
     const price = await this.getPrice(token, timestamp);
     if (price.eq('0')) {
       Configuration.logger.debug('No price exists');
       return { hold: new BigNumberJs(0), cost: new BigNumberJs(0) };
     }
     const decimalsBN = new BigNumberJs('10').pow((await token.decimals()).toString());
-    return {
-      hold: new BigNumberJs(amountIn.toString()).multipliedBy(-1),
-      cost: new BigNumberJs(amountOut.toString()).multipliedBy(price).div(decimalsBN).multipliedBy(-1),
-    };
-  }
-
-  private async swapExactTokensForTokensIn (
-    token0Address: any,
-    toToken: Contract,
-    event: LogDescription,
-    fromToken: Contract,
-    timestamp: number,
-    amountIn: BigNumber,
-  ) {
-    const amountOut = token0Address === toToken.address ? event.args.amount0Out : event.args.amount1Out;
-    const price = await this.getPrice(fromToken, timestamp);
-    if (price.eq('0')) {
-      Configuration.logger.debug('No price exists');
-      return { hold: new BigNumberJs(0), cost: new BigNumberJs(0) };
-    }
-    const decimalsBN = new BigNumberJs('10').pow((await toToken.decimals()).toString());
-    return {
-      hold: new BigNumberJs(amountOut.toString()),
-      cost: new BigNumberJs(amountIn.toString()).multipliedBy(price).div(decimalsBN),
-    };
-  }
-
-  private async swapExactTokensForTokensOut (
-    token0Address: any,
-    toToken: Contract,
-    event: LogDescription,
-    timestamp: number,
-    amountIn: BigNumber,
-  ) {
-    const amountOut = token0Address === toToken.address ? event.args.amount0Out : event.args.amount1Out;
-    const price = await this.getPrice(toToken, timestamp);
-    if (price.eq('0')) {
-      Configuration.logger.debug('No price exists');
-      return { hold: new BigNumberJs(0), cost: new BigNumberJs(0) };
-    }
-    const decimalsBN = new BigNumberJs('10').pow((await toToken.decimals()).toString());
     return {
       hold: new BigNumberJs(amountIn.toString()).multipliedBy(-1),
       cost: new BigNumberJs(amountOut.toString()).multipliedBy(price).div(decimalsBN).multipliedBy(-1),

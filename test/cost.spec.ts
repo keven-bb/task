@@ -45,12 +45,16 @@ describe('Uniswap Cost Test', () => {
   it('swapExactTokensForTokens - swap in', async () => {
     const [tokenA, tokenB] = tokens;
     const amountIn = utils.parseEther('10');
+    // 使用 确定量的A 换 B
     const { hash } = await uniswap.swapExactTokensForTokens([tokenA, tokenB], amountIn, Configuration.wallet.address);
+    // 求持有B的成本
     const { hold, cost } = await new Cost(Configuration.wallet.address, tokenB.address, getPrice).start();
-    const price = await getPriceFrom(hash, tokenA);
+    // 持有量：B 的数量
     const [{ args: { amount0Out } }] = (await uniswap.getSwapEvent(tokenA, tokenB, Configuration.wallet.address)) as Result | { args: { amount0Out: BigNumber } }[];
     const expectedHold = amount0Out.toString();
     assert.equal(hold.toString(), expectedHold);
+    // 成本：A 的数量 * 价格
+    const price = await getPriceFrom(hash, tokenA);
     const expectedCost = price.multipliedBy(amountIn.toString()).div(new BigNumberJs(10).pow(18));
     assert.equal(cost.toString(), expectedCost.toString());
   });
@@ -58,12 +62,16 @@ describe('Uniswap Cost Test', () => {
   it('swapExactTokensForTokens - swap out', async () => {
     const [tokenA, tokenB] = tokens;
     const amountIn = utils.parseEther('10');
+    // 使用 确定量的A 换 B
     const { hash } = await uniswap.swapExactTokensForTokens([tokenA, tokenB], amountIn, Configuration.wallet.address);
+    // 求持有A的成本
     const { hold, cost } = await new Cost(Configuration.wallet.address, tokenA.address, getPrice).start();
-    const price = await getPriceFrom(hash, tokenB);
-    const [{ args: { amount0Out } }] = (await uniswap.getSwapEvent(tokenA, tokenB, Configuration.wallet.address)) as Result | { args: { amount0Out: BigNumber } }[];
+    // 持有量：A 的数量
     const expectedHold = '-' + amountIn.toString();
     assert.equal(hold.toString(), expectedHold);
+    // 成本：B 的数量 * 价格
+    const price = await getPriceFrom(hash, tokenB);
+    const [{ args: { amount0Out } }] = (await uniswap.getSwapEvent(tokenA, tokenB, Configuration.wallet.address)) as Result | { args: { amount0Out: BigNumber } }[];
     const expectedCost = '-' + price.multipliedBy(amount0Out.toString()).div(new BigNumberJs(10).pow(18)).toString();
     assert.equal(cost.toString(), expectedCost);
   });
@@ -72,12 +80,14 @@ describe('Uniswap Cost Test', () => {
     const [tokenA, tokenB] = tokens;
     const amountMaxIn = utils.parseEther('20');
     const amountOut = utils.parseEther('10');
+    // 使用 A 换 确定量的B
     const { hash } = await uniswap.swapTokensForExactTokens([tokenA, tokenB], amountMaxIn, amountOut, Configuration.wallet.address);
+    // 求持有B的成本
     const { hold, cost } = await new Cost(Configuration.wallet.address, tokenB.address, getPrice).start();
-
+    // 持有量：B 的数量
     const expectedHold = amountOut.toString();
     assert.equal(hold.toString(), expectedHold);
-
+    // 成本：A 的数量 * 价格
     const price = await getPriceFrom(hash, tokenA);
     const [{ args: { amount1In } }] = (await uniswap.getSwapEvent(tokenA, tokenB, Configuration.wallet.address)) as Result | { args: { amount0Out: BigNumber } }[];
     const expectedCost = price.multipliedBy(amount1In.toString()).div(new BigNumberJs(10).pow(18)).toString();
@@ -88,13 +98,15 @@ describe('Uniswap Cost Test', () => {
     const [tokenA, tokenB] = tokens;
     const amountMaxIn = utils.parseEther('20');
     const amountOut = utils.parseEther('10');
+    // 使用 A 换 确定量的B
     const { hash } = await uniswap.swapTokensForExactTokens([tokenA, tokenB], amountMaxIn, amountOut, Configuration.wallet.address);
+    // 求持有A的成本
     const { hold, cost } = await new Cost(Configuration.wallet.address, tokenA.address, getPrice).start();
-
+    // 持有量：A 的数量
     const [{ args: { amount1In } }] = (await uniswap.getSwapEvent(tokenA, tokenB, Configuration.wallet.address)) as Result | { args: { amount0Out: BigNumber } }[];
     const expectedHold = '-' + amount1In.toString();
     assert.equal(hold.toString(), expectedHold);
-
+    // 成本：B 的数量 * 价格
     const price = await getPriceFrom(hash, tokenB);
     const expectedCost = '-' + price.multipliedBy(amountOut.toString()).div(new BigNumberJs(10).pow(18)).toString();
     assert.equal(cost.toString(), expectedCost);
