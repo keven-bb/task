@@ -41,7 +41,7 @@ export class Uniswap {
     let pair = this.getPair(tokenA, tokenB);
     await tokenA.approve(this.router.address, amountA);
     await tokenB.approve(this.router.address, amountB);
-    await this.router.addLiquidity(
+    await retry(() => this.router.addLiquidity(
       tokenA.address,
       tokenB.address,
       amountA,
@@ -50,7 +50,7 @@ export class Uniswap {
       BigNumber.from('1'),
       Configuration.wallet.address,
       Uniswap.getDeadline(),
-    );
+    ));
     if (pair == null) {
       const pairIndex = (await this.factory.allPairsLength()) as BigNumber;
       const address = await this.factory.allPairs(pairIndex.sub('1'));

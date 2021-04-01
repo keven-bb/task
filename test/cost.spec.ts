@@ -95,7 +95,7 @@ describe('Uniswap Cost Test', () => {
     const expectedHold = '-' + amount1In.toString();
     assert.equal(hold.toString(), expectedHold);
 
-    const price = await getPriceFrom(hash, tokenA);
+    const price = await getPriceFrom(hash, tokenB);
     const expectedCost = '-' + price.multipliedBy(amountOut.toString()).div(new BigNumberJs(10).pow(18)).toString();
     assert.equal(cost.toString(), expectedCost);
   });

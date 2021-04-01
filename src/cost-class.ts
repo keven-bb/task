@@ -156,31 +156,10 @@ export class Cost {
         const token0Address = (await firstSwapPair.token0()).toLowerCase();
         const { timestamp } = await Configuration.provider.getBlock(blockNumber as number);
         const { args: [amountOut] } = transactionDescription;
-        if (fromToken.address === this.token.address) {
-          const amountIn = fromToken.address === token0Address ? event.args.amount0In : event.args.amount1In;
-          const price = await this.getPrice(fromToken, timestamp);
-          if (price.eq('0')) {
-            Configuration.logger.debug('No price exists');
-            return { hold: new BigNumberJs(0), cost: new BigNumberJs(0) };
-          }
-          const decimalsBN = new BigNumberJs('10').pow((await toToken.decimals()).toString());
-          return {
-            hold: new BigNumberJs(amountIn.toString()).multipliedBy(-1),
-            cost: new BigNumberJs(amountOut.toString()).multipliedBy(price).div(decimalsBN).multipliedBy(-1),
-          };
-        } else {
-          const amountIn = fromToken.address === token0Address ? event.args.amount0In : event.args.amount1In;
-          const price = await this.getPrice(fromToken, timestamp);
-          if (price.eq('0')) {
-            Configuration.logger.debug('No price exists');
-            return { hold: new BigNumberJs(0), cost: new BigNumberJs(0) };
-          }
-          const decimalsBN = new BigNumberJs('10').pow((await fromToken.decimals()).toString());
-          return {
-            hold: new BigNumberJs(amountOut.toString()),
-            cost: new BigNumberJs(amountIn.toString()).multipliedBy(price).div(decimalsBN),
-          };
-        }
+        const amountIn = fromToken.address === token0Address ? event.args.amount0In : event.args.amount1In;
+        return fromToken.address === this.token.address
+          ? this.negativeHold(toToken, timestamp, amountIn, amountOut)
+          : this.positiveHold(fromToken, timestamp, amountIn, amountOut);
       }
       case 'swapExactETHForTokens': {
         return {
@@ -213,6 +192,32 @@ export class Cost {
           cost: new BigNumberJs(0),
         };
     }
+  }
+
+  private async positiveHold (token: Contract, timestamp: number, amountIn:BigNumber, amountOut:BigNumber) {
+    const price = await this.getPrice(token, timestamp);
+    if (price.eq('0')) {
+      Configuration.logger.debug('No price exists');
+      return { hold: new BigNumberJs(0), cost: new BigNumberJs(0) };
+    }
+    const decimalsBN = new BigNumberJs('10').pow((await token.decimals()).toString());
+    return {
+      hold: new BigNumberJs(amountOut.toString()),
+      cost: new BigNumberJs(amountIn.toString()).multipliedBy(price).div(decimalsBN),
+    };
+  }
+
+  private async negativeHold (token: Contract, timestamp: number, amountIn:BigNumber, amountOut:BigNumber) {
+    const price = await this.getPrice(token, timestamp);
+    if (price.eq('0')) {
+      Configuration.logger.debug('No price exists');
+      return { hold: new BigNumberJs(0), cost: new BigNumberJs(0) };
+    }
+    const decimalsBN = new BigNumberJs('10').pow((await token.decimals()).toString());
+    return {
+      hold: new BigNumberJs(amountIn.toString()).multipliedBy(-1),
+      cost: new BigNumberJs(amountOut.toString()).multipliedBy(price).div(decimalsBN).multipliedBy(-1),
+    };
   }
 
   private async swapExactTokensForTokensIn (

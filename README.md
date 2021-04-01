@@ -66,7 +66,23 @@
     
     高频并发请求服务器会出现`SERVER_ERROR`，由于都是读请求，所以每个请求重试`3`次（可配置），全部失败的话，请抛出异常，停止任务
 
-#### 使用说明
+### Test #2
+
+### 题目
+- 统计某个地址下在`UNISWAP`上持有`UNI`的成本（USD）
+
+### 思路
+1. 遍历 `uniswap` 下的 `factory` 合约的 `PairCreated` 事件
+2. 筛选出与`UNI`相关的交易对 => `UNI` 交易对集合
+3. 遍历`UNI`交易对集合下相关的`Swap`事件，得到事件发生的`txHash`
+4. 根据`txHash`获得`Transaction`和`TransactionReceipt`
+5. 过滤掉`Transaction`中`to`值不为`uniswap router`的交易
+6. 解析`Transaction`的`data`值，可得到具体调用的`swap`方法，比如`SwapExactTokensForTokens`
+7. 根据`swap`方法的不同，从`Transaction`的`data`和`TransactionReceipt`的`Swap`事件参数，获得用于计算的数据
+8. 判断`swap`操作是换入还是换出，计算得到本次交易中`hold`和`cost`值（换入为正值，换出为负值）
+9. 聚合所有`Swap`事件的结果，将所有`hold`和`cost`合并计算可以得到该地址在`uniswap`中交易的成本
+
+### 使用说明
 
 环境：
 - nodejs v12.14.0
@@ -110,21 +126,5 @@
     
 - `yarn test`
     - 说明：执行单元测试
-
-### Test #2
-
-### 题目
-- 统计某个地址下在`UNISWAP`上持有`UNI`的成本（USD）
-
-### 思路
-1. 遍历 `uniswap` 下的所有 `pair`, 找出`UNI`相关的交易对
-2. 获取交易对信息，包括：`token0`, `token1`
-3. 遍历相关交易对的`swap`事件，获取最终的`发送方`,`接收方`,`输入值0`,`输入值1`,`输出值0`,`输出值1`
-4. 根据事件的`txHash`，可以得到`input data`, `timestamp` 以及`交互合约`(判断是否在`uniswap`上进行交易)
-5. 解析 `input data` 可得知`UNI`只是作为中间币，还是`From`币，或是`To`币
-   - 中间币：忽略该事件，因为其只是用过过渡
-6. 通过`timestamp`及`Uniswap`提供的[api接口](https://uniswap.org/docs/v2/API/overview/)，可得知对手币种在当天的价格
-7. 若`UNI`作为`From`方，则为卖出，通过计算对手币的价格，可以得到本次交易得到的价值
-8. 若`UNI`作为`To`方，则为买出，通过计算对手币的价格，可以得到本次交易的成本
 
 
