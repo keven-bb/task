@@ -1,7 +1,7 @@
 import { GanacheFixture } from './helpers/ganache';
 import { Configuration } from '../src/config';
-import { BigNumber, Contract, ethers, utils } from 'ethers';
-import { deployERC20Token, deployWETH, getPrice, mintToken, getPriceFrom, generateAccount } from './helpers/utils';
+import { BigNumber, Contract, utils } from 'ethers';
+import { deployERC20Token, deployWETH, getPrice, mintToken, getPriceFrom } from './helpers/utils';
 import { Uniswap } from './helpers/uniswap';
 import { Cost } from '../src/cost-class';
 import { assert } from 'chai';

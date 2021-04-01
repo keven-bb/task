@@ -8,7 +8,7 @@
     "monitor": "NODE_ENV=dev DEBUG=* ts-node ./src/monitor.ts",
     "cost": "NODE_ENV=dev DEBUG=* ts-node ./src/cost.ts",
     "test": "mocha --require ts-node/register ./test",
-    "lint": "eslint ./src/**/*.ts && eslint ./test/**/*.ts"
+    "lint": "eslint ./src/**/*.ts && eslint ./test/**/*.ts && eslint ./test/**/*.spec.ts"
   },
   "dependencies": {
     "@types/config": "^0.0.38",
