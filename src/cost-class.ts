@@ -6,6 +6,18 @@ import { PairCreatedCollect, SwapCollect } from './transfer-collect';
 import PairJSON from '@uniswap/v2-periphery/build/IUniswapV2Pair.json';
 import { Log, TransactionReceipt, TransactionResponse } from '@ethersproject/abstract-provider';
 import { Price } from './price';
+import { Result } from 'ethers/lib/utils';
+
+type SwapEventArgs = {
+  sender: string,
+  amount0In: BigNumber,
+  amount1In: BigNumber,
+  amount0Out: BigNumber,
+  amount1Out: BigNumber,
+  to: string,
+}
+
+const defaultHoldAndCost = () => ({ hold: new BigNumberJs(0), cost: new BigNumberJs(0), decimals: '0' });
 
 export class Cost {
   private readonly token: Contract;
@@ -22,38 +34,61 @@ export class Cost {
 
   public async start () {
     const latest = await Configuration.provider.getBlockNumber();
+
+    // 收集所有交易对
     const pairs = await this.getPairs(this.token, latest);
     Configuration.logger.debug(`Got ${pairs.length} pairs`);
     if (pairs.length === 0) {
-      return { hold: new BigNumberJs(0), cost: new BigNumberJs(0) };
+      return defaultHoldAndCost();
     }
-    const events = (await Promise.all(pairs.map(pair => this.getSwapEvents(pair, this.token, latest))))
-      .flatMap(events => events);
-    Configuration.logger.debug(`Got ${events.length} swap events`);
-    if (events.length === 0) {
-      return { hold: new BigNumberJs(0), cost: new BigNumberJs(0) };
+    // 收集所有相关的事件发生的交易hash
+    const txHashes = (await Promise.all(pairs.map(pair => this.getSwapEvents(pair, this.token, latest))))
+      .flatMap(events => events)
+      .map(({ transactionHash }) => transactionHash);
+    Configuration.logger.debug(`Got ${txHashes.length} swap events`);
+    if (txHashes.length === 0) {
+      return defaultHoldAndCost();
     }
-    const txAndTxReceipts = (await Promise.all(
-      events.map(({ transactionHash }) => Cost.getTxAndTxReceipt(transactionHash)),
-    )).filter(({ tx: { to } }) => to === Configuration.router.address);
-    Configuration.logger.debug(`Got ${txAndTxReceipts.length} txs`);
-    if (txAndTxReceipts.length === 0) {
-      return { hold: new BigNumberJs(0), cost: new BigNumberJs(0) };
+
+    // 收集每一次交易得到的持有量和成本
+    const holdAndCosts = (await Promise.all(txHashes.map(hash => this.getHoldAndCostFrom(hash))))
+      // 计算所有交易，得到总持有量和总成本
+      .reduce<{ hold: BigNumberJs, cost: { [key: string]: BigNumberJs } }>(
+        (acc, { hold, cost, decimals }) => {
+          if (!cost.eq(0)) {
+            acc.cost[decimals] = cost.plus(acc.cost[decimals] ? acc.cost[decimals] : 0);
+          }
+          return {
+            hold: acc.hold.plus(hold),
+            cost: acc.cost,
+          };
+        }, {
+          hold: new BigNumberJs(0),
+          cost: {},
+        },
+      );
+
+    return {
+      hold: holdAndCosts.hold,
+      cost: Object.entries(holdAndCosts.cost).reduce((acc, [decimals, cost]) => {
+        return acc.plus(cost.div(new BigNumberJs(10).pow(decimals)));
+      }, new BigNumberJs(0)),
+    };
+  }
+
+  private async getHoldAndCostFrom (txHash: string) {
+    const txs = await Promise.all([
+      Configuration.provider.getTransaction(txHash),
+      Configuration.provider.getTransactionReceipt(txHash),
+    ]);
+
+    const [{ to }] = txs;
+    if (to !== Configuration.router.address) {
+      // 并非用户直接在uniswap上swap
+      return defaultHoldAndCost();
     }
-    const holdAndCosts = await Promise.all(txAndTxReceipts
-      .map(({ tx, txReceipt }) => this.getHoldAndCost(tx, txReceipt)));
-    return holdAndCosts.reduce<{ hold: BigNumberJs, cost: BigNumberJs }>(({
-      hold: accHold,
-      cost: accCost,
-    }, { hold, cost }) => {
-      return {
-        hold: accHold.plus(hold),
-        cost: accCost.plus(cost),
-      };
-    }, {
-      hold: new BigNumberJs(0),
-      cost: new BigNumberJs(0),
-    });
+
+    return this.getHoldAndCost(...txs);
   }
 
   private async getPairs (token: Contract, latest: number) {
@@ -87,87 +122,42 @@ export class Cost {
     return result.events;
   }
 
-  private static async getTxAndTxReceipt (txHash: string) {
-    return {
-      tx: await Configuration.provider.getTransaction(txHash),
-      txReceipt: await Configuration.provider.getTransactionReceipt(txHash),
-    };
-  }
-
-  private async getHoldAndCost ({
-    blockNumber,
-    data,
-    value,
-  }: TransactionResponse, { logs }: TransactionReceipt): Promise<{ hold: BigNumberJs, cost: BigNumberJs }> {
+  private async getHoldAndCost (
+    {
+      blockNumber,
+      data,
+      value,
+    }: TransactionResponse,
+    {
+      logs,
+    }: TransactionReceipt,
+  ) {
     const transactionDescription = Configuration.router.interface.parseTransaction({ data, value });
-    const {
-      name,
-      args,
-    } = transactionDescription;
-    const path = args.path as Array<string>;
+
+    const path = transactionDescription.args.path as Array<string>;
     const fromToken = new Contract(path[0].toLowerCase(), ERC20JSON.abi, Configuration.provider);
     const toToken = new Contract(path[path.length - 1].toLowerCase(), ERC20JSON.abi, Configuration.provider);
     if (fromToken.address !== this.token.address && toToken.address !== this.token.address) {
       Configuration.logger.debug(`swap from ${path[0]} to ${path[path.length - 1]}, ${this.token.address} is either the source or target token`);
-      return {
-        hold: new BigNumberJs(0),
-        cost: new BigNumberJs(0),
-      };
+      return defaultHoldAndCost();
     }
+
+    // 获得pair及其swap事件
     const pairPath = await this.getPairAndEvents(logs, path);
 
-    switch (name) {
-      case 'swapExactTokensForTokens': {
-        const { contract: lastSwapPair, event } = pairPath[pairPath.length - 1];
-        const token0Address = (await lastSwapPair.token0()).toLowerCase();
-        const { args: [amountIn] } = transactionDescription;
-        const { timestamp } = await Configuration.provider.getBlock(blockNumber as number);
-        const amountOut = token0Address === toToken.address ? event.args.amount0Out : event.args.amount1Out;
-        return fromToken.address === this.token.address
-          ? this.negativeHold(toToken, timestamp, amountIn, amountOut)
-          : this.positiveHold(fromToken, timestamp, amountIn, amountOut);
-      }
-      case 'swapTokensForExactTokens': {
-        const { contract: firstSwapPair, event } = pairPath[0];
-        const token0Address = (await firstSwapPair.token0()).toLowerCase();
-        const { timestamp } = await Configuration.provider.getBlock(blockNumber as number);
-        const { args: [amountOut] } = transactionDescription;
-        const amountIn = fromToken.address === token0Address ? event.args.amount0In : event.args.amount1In;
-        return fromToken.address === this.token.address
-          ? this.negativeHold(toToken, timestamp, amountIn, amountOut)
-          : this.positiveHold(fromToken, timestamp, amountIn, amountOut);
-      }
-      case 'swapExactETHForTokens': {
-        return {
-          hold: new BigNumberJs(0),
-          cost: new BigNumberJs(0),
-        };
-      }
-      case 'swapTokensForExactETH': {
-        return {
-          hold: new BigNumberJs(0),
-          cost: new BigNumberJs(0),
-        };
-      }
-      case 'swapExactTokensForETH': {
-        return {
-          hold: new BigNumberJs(0),
-          cost: new BigNumberJs(0),
-        };
-      }
-      case 'swapETHForExactTokens': {
-        return {
-          hold: new BigNumberJs(0),
-          cost: new BigNumberJs(0),
-        };
-      }
-      default:
-        Configuration.logger.debug('Unknown method: ' + name);
-        return {
-          hold: new BigNumberJs(0),
-          cost: new BigNumberJs(0),
-        };
-    }
+    const firstPair = pairPath[0];
+    const { amount0In, amount1In } = firstPair.event.args as Result | SwapEventArgs;
+    const amountIn = fromToken.address === (await firstPair.contract.token0()).toLowerCase() ? amount0In : amount1In;
+
+    const lastPair = pairPath[pairPath.length - 1];
+    const { amount0Out, amount1Out } = lastPair.event.args as Result | SwapEventArgs;
+    const amountOut = toToken.address === (await lastPair.contract.token0()).toLowerCase() ? amount0Out : amount1Out;
+
+    const { timestamp } = await Configuration.provider.getBlock(blockNumber as number);
+
+    return fromToken.address === this.token.address
+      ? Cost.negative(await this.getResult(toToken, timestamp, amountOut, amountIn))
+      : this.getResult(fromToken, timestamp, amountIn, amountOut);
   }
 
   private async getPairAndEvents (logs: Array<Log>, path: Array<string>) {
@@ -202,29 +192,25 @@ export class Cost {
       });
   }
 
-  private async positiveHold (token: Contract, timestamp: number, amountIn: BigNumber, amountOut: BigNumber) {
+  private async getResult (token: Contract, timestamp: number, hold: BigNumber, cost: BigNumber) {
     const price = await this.getPrice(token, timestamp);
     if (price.eq('0')) {
       Configuration.logger.debug('No price exists');
-      return { hold: new BigNumberJs(0), cost: new BigNumberJs(0) };
+      return defaultHoldAndCost();
     }
-    const decimalsBN = new BigNumberJs('10').pow((await token.decimals()).toString());
+    const decimals = await token.decimals() as BigNumber;
     return {
-      hold: new BigNumberJs(amountOut.toString()),
-      cost: new BigNumberJs(amountIn.toString()).multipliedBy(price).div(decimalsBN),
+      hold: new BigNumberJs(cost.toString()),
+      cost: new BigNumberJs(hold.toString()).multipliedBy(price),
+      decimals: decimals.toString(),
     };
   }
 
-  private async negativeHold (token: Contract, timestamp: number, amountIn: BigNumber, amountOut: BigNumber) {
-    const price = await this.getPrice(token, timestamp);
-    if (price.eq('0')) {
-      Configuration.logger.debug('No price exists');
-      return { hold: new BigNumberJs(0), cost: new BigNumberJs(0) };
-    }
-    const decimalsBN = new BigNumberJs('10').pow((await token.decimals()).toString());
+  private static negative ({ hold, cost, decimals }: { hold: BigNumberJs, cost: BigNumberJs, decimals: string }) {
     return {
-      hold: new BigNumberJs(amountIn.toString()).multipliedBy(-1),
-      cost: new BigNumberJs(amountOut.toString()).multipliedBy(price).div(decimalsBN).multipliedBy(-1),
+      hold: hold.multipliedBy(-1),
+      cost: cost.multipliedBy(-1),
+      decimals,
     };
   }
 }
