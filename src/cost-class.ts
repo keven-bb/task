@@ -156,8 +156,8 @@ export class Cost {
     const { timestamp } = await Configuration.provider.getBlock(blockNumber as number);
 
     return fromToken.address === this.token.address
-      ? Cost.negative(await this.getResult(toToken, timestamp, amountOut, amountIn))
-      : this.getResult(fromToken, timestamp, amountIn, amountOut);
+      ? this.getResult(toToken, timestamp, amountOut, amountIn, false)
+      : this.getResult(fromToken, timestamp, amountIn, amountOut, true);
   }
 
   private async getPairAndEvents (logs: Array<Log>, path: Array<string>) {
@@ -192,7 +192,7 @@ export class Cost {
       });
   }
 
-  private async getResult (token: Contract, timestamp: number, hold: BigNumber, cost: BigNumber) {
+  private async getResult (token: Contract, timestamp: number, hold: BigNumber, cost: BigNumber, isSwapIn: boolean) {
     const price = await this.getPrice(token, timestamp);
     if (price.eq('0')) {
       Configuration.logger.debug('No price exists');
@@ -200,17 +200,9 @@ export class Cost {
     }
     const decimals = await token.decimals() as BigNumber;
     return {
-      hold: new BigNumberJs(cost.toString()),
-      cost: new BigNumberJs(hold.toString()).multipliedBy(price),
+      hold: new BigNumberJs(cost.toString()).multipliedBy(isSwapIn ? 1 : -1),
+      cost: new BigNumberJs(hold.toString()).multipliedBy(price).multipliedBy(isSwapIn ? 1 : -1),
       decimals: decimals.toString(),
-    };
-  }
-
-  private static negative ({ hold, cost, decimals }: { hold: BigNumberJs, cost: BigNumberJs, decimals: string }) {
-    return {
-      hold: hold.multipliedBy(-1),
-      cost: cost.multipliedBy(-1),
-      decimals,
     };
   }
 }
